@@ -110,3 +110,8 @@ ENV/
 已解析BP/
 
 label/
+
+*.json
+*.xlsx
+
+*.zip
