@@ -122,3 +122,7 @@ vectors/
 
 .ipynb_checkpoints/
 .ipynb_checkpoints
+
+log/
+
+*.csv
