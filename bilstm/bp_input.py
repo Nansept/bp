@@ -4,49 +4,45 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-def bp_raw_data():
-    # read dat from file
-    data = np.load("../labeledEmbedding.npy")
-    label = np.genfromtxt("../EmbeddingLabel.csv", usecols=[1], 
-            delimiter=",", dtype=np.int32)
-
+def bp_raw_data(test_size=0.1):
+    # read data from file
+    data = np.load("../Embedding3D.npy")
+    sequence_length = data.any(axis=2).sum(axis=1)
+    l = np.genfromtxt("../EmbeddingLabel.csv", delimiter=",", usecols=[1], dtype=np.int32)
+    l += 1
+    label = np.zeros(data.shape[0: 2], dtype=np.int32)
+    y_begin = 0
+    for i, m in enumerate(sequence_length):
+        y_end = y_begin + m
+        label[i][:m] = l[y_begin: y_end]
+        y_begin = y_end
+        
     # cut 1 / 10 data from tail as test data
+    assert test_size > 0, "test_size shold be a positive number"
+    
     size = data.shape[0]
-    test_size = size // 10
+    if test_size < 1:
+        test_size = int(size * test_size)
     
     train_data = data[: -test_size]
     train_label = label[: -test_size]    
-    
     test_data = data[-test_size: ]
     test_label = label[-test_size: ]   
      
     return (train_data, train_label), (test_data, test_label)
 
-
-def input_producer(data, label, batch_size, num_steps):
-
-    epoch_size = (data.shape[0] // batch_size - 1) // num_steps
-    batch_len = data.shape[0] // batch_size
-    vec_len = data.shape[1]
-    data = np.reshape(data[0: batch_size*batch_len], 
-                      [batch_size, batch_len, vec_len])
-    label = label[0: batch_size*batch_len].reshape(batch_size, batch_len)
-    epoch_size = (batch_len - 1) // num_steps
-
-    data = tf.convert_to_tensor(data, name="data", dtype=tf.float32)
-    label = tf.convert_to_tensor(label, name="label", dtype=tf.int32)
-    assertion = tf.assert_positive(
-        epoch_size,
-        message="epoch_size == 0, decrease batch_size or num_steps")
-    with tf.control_dependencies([assertion]):
-        epoch_size = tf.identity(epoch_size, name="epoch_size") 
-    i = tf.train.range_input_producer(epoch_size, shuffle=False).dequeue()
-    x = tf.strided_slice(data, [0, i * num_steps, 0], 
-                         [batch_size, (i + 1) * num_steps, vec_len])
-    x.set_shape([batch_size, num_steps, vec_len])
-    y = tf.strided_slice(label, [0, i * num_steps], 
-                         [batch_size, (i + 1) * num_steps])
-    y.set_shape([batch_size, num_steps])
-    return x, y              
+class BPInput(object):
+    def __init__(self, batch_size, data, label):
+        self.data_size, self.num_steps, self.hidden_size = data.shape
+        self.batch_size = batch_size
+        self.epoch_size = self.data_size // batch_size
+        data = tf.convert_to_tensor(data, name="data", dtype=tf.float32)
+        label = tf.convert_to_tensor(label, name="label", dtype=tf.int32)
+        i = tf.train.range_input_producer(self.epoch_size, shuffle=False).dequeue()
+        self.inputs = tf.strided_slice(data, [i * batch_size, 0, 0], [(i + 1) * batch_size, self.num_steps, self.hidden_size])
+        self.inputs.set_shape([batch_size, self.num_steps, self.hidden_size])
+        self.targets = tf.strided_slice(label, [i * batch_size, 0], [(i + 1) * batch_size, self.num_steps])
+        self.targets.set_shape([batch_size, self.num_steps])
+             
 
 
