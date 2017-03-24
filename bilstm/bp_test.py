@@ -30,6 +30,9 @@ max_epoch = 100
 # input data
 (tr_d, tr_l), (te_d, te_l) = bp_input.bp_raw_data(test_size=10)
 
+#test_input = bp_input.BPInput(batch_size, te_d, te_l)
+#inputs, labels, epoch_size = test_input.inputs, test_input.targets, test_input.epoch_size
+
 train_input = bp_input.BPInput(batch_size, tr_d, tr_l)
 inputs, labels, epoch_size = train_input.inputs, train_input.targets, train_input.epoch_size
 
@@ -79,9 +82,6 @@ loss = tf.contrib.legacy_seq2seq.sequence_loss_by_example(
     weights=[mask])
 cost = tf.reduce_sum(loss) / batch_size
 
-# optimizer and train operation
-optimizer = tf.train.GradientDescentOptimizer(0.05)
-train_op = optimizer.minimize(cost)
 
 # prediction
 prediction = tf.argmax(logits, 1) * tf.to_int64(mask)
@@ -143,8 +143,8 @@ def run_epoch(sess):
             feed_dict[c] = state_bw[i].c
             feed_dict[h] = state_bw[i].h
         # 
-        c, state_fw, state_bw, _, pred = sess.run(
-            [cost, output_state_fw, output_state_bw, train_op, prediction],
+        c, state_fw, state_bw, pred = sess.run(
+            [cost, output_state_fw, output_state_bw, prediction],
             feed_dict)
         # 
         costs += c
@@ -178,13 +178,11 @@ threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 # train several epoches
 for i in range(max_epoch):
     print("epoch: %4d" % i)
-    p = run_epoch(sess)
-    
-    analyse(p, tr_l[: p.shape[0]], verbose=True)
-    
     if i % 10 == 0 or i + 1 == max_epoch:
-        saver.save(sess, ckpt_path, global_step=i, write_meta_graph=False)
-    #saver.restore(sess, ckpt_path + "-%d" % global_step)
+        #saver.save(sess, ckpt_path, global_step=i, write_meta_graph=False)
+        saver.restore(sess, ckpt_path + "-%d" % i)
+        p = run_epoch(sess)
+        analyse(p, tr_l[: p.shape[0]], verbose=True)
     
 # stop threads 
 coord.request_stop()
