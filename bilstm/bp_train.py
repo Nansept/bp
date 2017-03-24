@@ -25,14 +25,14 @@ num_layers = 2
 # num of output classes 
 num_classes = 6
 # max epoch
-max_epoch = 30
+max_epoch = 100
 
 # input data
 (tr_d, tr_l), (te_d, te_l) = bp_input.bp_raw_data(test_size=10)
 
 train_input = bp_input.BPInput(batch_size, tr_d, tr_l)
-
 inputs, labels, epoch_size = train_input.inputs, train_input.targets, train_input.epoch_size
+
 inputs = tf.unstack(inputs, num=num_steps, axis=1)
 
 
@@ -86,6 +86,43 @@ train_op = optimizer.minimize(cost)
 # prediction
 prediction = tf.argmax(logits, 1) * tf.to_int64(mask)
 
+# analyse
+def analyse(p, l, verbose=False):
+    ppd = pd.DataFrame(p)
+    lpd = pd.DataFrame(l)
+    # all sample
+    m = (lpd != 0) 
+    total_size = m.sum().sum()
+    acc_size = ((ppd == lpd) & m).sum().sum()
+    acc = 1.0 * acc_size / total_size
+    # pos sample
+    m2 = (lpd > 1)
+    pos_size = m2.sum().sum()
+    pos_p = lpd[((ppd == lpd) & m2)]
+    pos_acc_size = ((ppd == lpd) & m2).sum().sum()
+    pos_acc = 1.0 * pos_acc_size / pos_size
+    # neg sample
+    neg_size = total_size - pos_size
+    neg_acc_size = acc_size - pos_acc_size
+    neg_acc = 1.0 * neg_acc_size / neg_size
+    # print to screen
+    if verbose:
+        print("total_size: %d, acc_size: %d, acc: %.3f" % (total_size, acc_size, acc))
+        print("pos_size: %d, pos_acc_size: %d, pos_acc: %.3f" % (pos_size, pos_acc_size, pos_acc))
+        print("neg_size: %d, neg_acc_size: %d, neg_acc: %.3f" % (neg_size, neg_acc_size, neg_acc))
+    return acc, pos_acc, neg_acc
+
+# draw
+def draw(p, l):
+    assert p.shape == l.shape
+    f1 = plt.subplot(121)
+    i1 = f1.imshow(p, vmin=0, vmax=5)
+    plt.colorbar(i1)
+    f2 = plt.subplot(122)
+    i2 = f2.imshow(l, vmin=0, vmax=5)
+    plt.show()
+    
+    
 # run an epoch
 def run_epoch(sess):
     start_time = time.time()
@@ -96,7 +133,6 @@ def run_epoch(sess):
     state_bw = sess.run(initial_state_bw)
     
     preds = []
-    
     for step in range(epoch_size):
         # construct feed_dict
         feed_dict = {}
@@ -113,14 +149,12 @@ def run_epoch(sess):
         # 
         costs += c
         iters += num_steps
-    
         preds.append(pred)
-    
         if step % (epoch_size // 10) == 0:
             print("%.3f perplexity: %.3f speed: %.0f wps" %
                 (step * 1.0 / epoch_size, np.exp(costs / iters),
                  iters * batch_size / (time.time() - start_time)))
-
+    preds = np.vstack(preds).reshape(-1, 53)
     return preds
 
 
@@ -145,22 +179,20 @@ threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 for i in range(max_epoch):
     print("epoch: %4d" % i)
     p = run_epoch(sess)
-    p = np.vstack(p).reshape(-1, 53)
-    f1 = plt.subplot(121)
-    i1 = f1.imshow(p, vmin=0, vmax=5)
-    plt.colorbar(i1)
-    f2 = plt.subplot(122)
-    f2.imshow(tr_l[: p.shape[0]], vmin=0, vmax=5)
-    plt.show()
+    
+    analyse(p, tr_l[: p.shape[0]], verbose=True)
+    
     if i % 10 == 0 or i + 1 == max_epoch:
         saver.save(sess, ckpt_path, global_step=i, write_meta_graph=False)
-    
-    #saver.restore(sess, ckpt_path + "-0" )
+    #saver.restore(sess, ckpt_path + "-%d" % global_step)
     
 # stop threads 
 coord.request_stop()
 # wait for all threads to stop
 coord.join(threads)
+
+draw(p, tr_l[: p.shape[0]])
+
 
 
 
