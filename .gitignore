@@ -110,3 +110,21 @@ ENV/
 已解析BP/
 
 label/
+
+*.json
+*.xlsx
+
+*.zip
+
+vectors/
+
+*.npy
+
+.ipynb_checkpoints/
+.ipynb_checkpoints
+
+log/
+
+*.csv
+
+ckpt_files/
